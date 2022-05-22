@@ -6,8 +6,7 @@
    [edamame.core :as edamame]
    [sci.impl.interop :as interop]
    [sci.impl.utils :as utils]
-   [sci.impl.vars :as vars]
-   [clojure.string :as str]))
+   [sci.impl.vars :as vars]))
 
 #?(:clj (set! *warn-on-reflection* true))
 
@@ -43,12 +42,10 @@
 
 (defn var->sym [v]
   (when-let [m (meta v)]
-    (if (:sci/record m)
-      (deref v)
-      (when-let [var-name (:name m)]
-        (when-let [ns (:ns m)]
-          (symbol (str (vars/getName ns))
-                  (str var-name)))))))
+    (when-let [var-name (:name m)]
+      (when-let [ns (:ns m)]
+        (symbol (str (vars/getName ns))
+                (str var-name))))))
 
 (defn fully-qualify [ctx sym]
   (let [env @(:env ctx)
@@ -77,9 +74,7 @@
                     (symbol "clojure.core" sym-name-str))
                   (interop/fully-qualify-class ctx sym)
                   ;; all unresolvable symbols all resolved in the current namespace
-                  (if (str/includes? sym-name-str ".")
-                    sym ;; unresolved class
-                    (symbol current-ns-str sym-name-str)))
+                  (symbol current-ns-str sym-name-str))
               (if (get-in env [:namespaces sym-ns])
                 sym
                 (if-let [ns (get aliases sym-ns)]

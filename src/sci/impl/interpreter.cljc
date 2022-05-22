@@ -2,15 +2,17 @@
   {:no-doc true}
   (:refer-clojure :exclude [destructure macroexpand macroexpand-1])
   (:require
-   [clojure.tools.reader.reader-types :as r]
+   #_[clojure.tools.reader.reader-types :as r]
    [sci.impl.analyzer :as ana]
-   [sci.impl.opts :as opts]
-   [sci.impl.parser :as p]
+   #_[sci.impl.opts :as opts]
+   #_[sci.impl.parser :as p]
    [sci.impl.types :as types]
    [sci.impl.utils :as utils]
-   [sci.impl.vars :as vars]))
+   #_[sci.impl.vars :as vars]
+   [missing.stuff :refer [instance?]]))
 
-#?(:clj (set! *warn-on-reflection* true))
+#?(:cljd ()
+   :clj (set! *warn-on-reflection* true))
 
 (defn eval-form [ctx form]
   ;; (.println System/err "form")
@@ -24,7 +26,7 @@
            (rest exprs)
            (eval-form ctx (first exprs)))
           ret))
-      (let [;; take care of invocation array for let
+      (let [ ;; take care of invocation array for let
             upper-sym (gensym)
             cb (volatile! {upper-sym {0 {:syms {}}}})
             ctx (assoc ctx
@@ -33,11 +35,12 @@
             analyzed (ana/analyze ctx form true)
             binding-array-size (count (get-in @cb [upper-sym 0 :syms]))
             bindings (object-array binding-array-size)]
-        (if (instance? #?(:clj sci.impl.types.EvalForm
+        (if (instance? #?(:cljd sci.impl.types/EvalForm
+                          :clj sci.impl.types.EvalForm
                           :cljs sci.impl.types/EvalForm) analyzed)
           (eval-form ctx (types/getVal analyzed))
           (try (types/eval analyzed ctx bindings)
-               (catch #?(:clj Throwable :cljs js/Error) e
+               (catch #?(:cljd Exception :clj Throwable :cljs js/Error) e
                  (utils/rethrow-with-location-of-node ctx bindings e analyzed))))))
     (let [upper-sym (gensym)
           cb (volatile! {upper-sym {0 {:syms {}}}})
@@ -48,12 +51,12 @@
           binding-array-size (count (get-in @cb [upper-sym 0 :syms]))
           bindings (object-array binding-array-size)]
       (try (types/eval analyzed ctx bindings)
-           (catch #?(:clj Throwable :cljs js/Error) e
+           (catch #?(:cljd Exception :clj Throwable :cljs js/Error) e
              (utils/rethrow-with-location-of-node ctx bindings e analyzed))))))
 
 (vreset! utils/eval-form-state eval-form)
 
-(defn eval-string* [ctx s]
+#_(defn eval-string* [ctx s]
   (vars/with-bindings {vars/current-ns @vars/current-ns}
     (let [reader (r/indexing-push-back-reader (r/string-push-back-reader s))]
       (loop [ret nil]
@@ -63,11 +66,11 @@
             (let [ret (eval-form ctx expr)]
               (recur ret))))))))
 
-(vreset! utils/eval-string* eval-string*)
+#_(vreset! utils/eval-string* eval-string*)
 
 ;;;; Called from public API
 
-(defn eval-string
+#_(defn eval-string
   ([s] (eval-string s nil))
   ([s opts]
    (let [init-ctx (opts/init opts)

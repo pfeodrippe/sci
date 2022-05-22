@@ -32,3 +32,13 @@ sci.build_artifacts.txt
 !test-resources/PublicFields.class
 .planck_cache
 .cpcache
+
+## ClojureDart
+# Files and directories created by pub.
+.dart_tool/
+.packages
+
+# Conventional directory for build output.
+build/
+.clojuredart/
+lib/cljd-out/
