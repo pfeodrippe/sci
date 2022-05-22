@@ -8,7 +8,8 @@
             )
   #?(:cljs (:require-macros [sci.impl.fns :refer [gen-fn]])))
 
-#?(:clj (set! *warn-on-reflection* true))
+#?(:cljd ()
+   :clj (set! *warn-on-reflection* true))
 
 (defmacro gen-fn
   ([n]
@@ -24,7 +25,10 @@
             (when ~'enclosed->invocation
               (~'enclosed->invocation ~'enclosed-array ~'invoc-array))
             ~@(when varargs
-                [`(aset ~'invoc-array ~'vararg-idx ~varargs-param)])
+                [`(aset ~(with-meta 'invoc-array
+                           {:tag 'cljd.core/PersistentVector})
+                        ~'vararg-idx
+                        ~varargs-param)])
             (loop []
               (let [ret# (types/eval ~'body ~'ctx ~'invoc-array)]
                 (if (kw-identical? :sci.impl.analyzer/recur ret#)
@@ -39,7 +43,7 @@
                                   [local ith]) locals nths))
            asets `(do ~@(map (fn [fn-param idx]
                                `(aset ~(with-meta 'invoc-array
-                                         {:tag 'objects}) ~idx ~fn-param))
+                                         {:tag 'cljd.core/PersistentVector}) ~idx ~fn-param))
                              fn-params (range)))]
        `(let ~let-vec
           (fn ~(symbol (str "arity-" n)) ~(cond-> fn-params
@@ -49,7 +53,10 @@
                 (~'enclosed->invocation ~'enclosed-array ~'invoc-array))
               ~asets
               ~@(when varargs
-                  [`(aset ~'invoc-array ~'vararg-idx ~varargs-param)])
+                  [`(aset ~(with-meta 'invoc-array
+                             {:tag 'cljd.core/PersistentVector})
+                          ~'vararg-idx
+                          ~varargs-param)])
               (loop []
                 (let [ret# (types/eval ~'body ~'ctx ~'invoc-array)]
                   (if (kw-identical? :sci.impl.analyzer/recur ret#)
@@ -61,7 +68,7 @@
     (pprint/pprint (macroexpand '(gen-run-fn 2))))
 
 (defn fun
-  [#?(:clj ^clojure.lang.Associative ctx :cljs ctx)
+  [#?(:clj ctx :cljs ctx)
    enclosed-array
    bindings
    fn-body
@@ -79,7 +86,7 @@
         #_:clj-kondo/ignore nsm (vars/current-ns-name)
         vararg-idx (:vararg-idx fn-body)
         f (if vararg-idx
-            (case (int fixed-arity)
+            (case (#_int identity fixed-arity)
               0 (gen-fn 0 true true)
               1 (gen-fn 1 true true)
               2 (gen-fn 2 true true)
@@ -101,7 +108,7 @@
               18 (gen-fn 18 true true)
               19 (gen-fn 19 true true)
               20 (gen-fn 20 true true))
-            (case (int fixed-arity)
+            (case (#_int identity fixed-arity)
               0 (gen-fn 0)
               1 (gen-fn 1)
               2 (gen-fn 2)
@@ -123,7 +130,7 @@
               18 (gen-fn 18)
               19 (gen-fn 19)
               20 (gen-fn 20)))]
-    f))
+      f))
 
 (defn lookup-by-arity [arities arity]
   (or (get arities arity)
@@ -164,12 +171,11 @@
                                :sci.impl/inner-fn f))
             f)]
     (when self-ref?
-      (aset ^objects enclosed-array (dec (count enclosed-array)) f))
+      (aset ^cljd.core/PersistentVector enclosed-array (dec (count enclosed-array)) f))
     f))
 
 (vreset! utils/eval-fn eval-fn)
 
 ;;;; Scratch
 
-(comment
-  )
+(comment)

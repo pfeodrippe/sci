@@ -1,24 +1,26 @@
 (ns sci.impl.types
   {:no-doc true}
   (:refer-clojure :exclude [eval])
-  #?(:clj (:require [sci.impl.macros :as macros]))
+  #?(:clj (:require [sci.impl.macros :as macros]
+                    [missing.stuff :refer [instance?]]))
   #?(:cljs (:require-macros [sci.impl.macros :as macros]
                             [sci.impl.types :refer [->Node]]))
   #?(:clj (:import [sci.impl.types IReified])))
 
-#?(:clj (set! *warn-on-reflection* true))
+#?(:cljd ()
+   :clj (set! *warn-on-reflection* true))
 
 (defprotocol IBox
   (setVal [_this _v])
   (getVal [_this]))
 
-#?(:cljs
-   (defprotocol IReified
-     (getInterfaces [_])
-     (getMethods [_])
-     (getProtocols [_])))
+(defprotocol IReified
+  (getInterfaces [_])
+  (getMethods [_])
+  (getProtocols [_]))
 
-#?(:clj
+#?(:cljd ()
+   :clj
    (do (defn getMethods [obj]
          (.getMethods ^IReified obj))
        (defn getInterfaces [obj]
@@ -33,11 +35,13 @@
   (getProtocols [_] protocols))
 
 (defn type-impl [x & _xs]
-  (or (when (instance? #?(:clj sci.impl.types.IReified :cljs sci.impl.types/Reified) x)
+  (or (when (instance? #?(:clj sci.impl.types/IReified :cljs sci.impl.types/Reified) x)
         :sci.impl.protocols/reified)
       (some-> x meta :type)
-      #?(:clj (class x) ;; no need to check for metadata anymore
+      #?(:clj (identity x) ;; no need to check for metadata anymore
          :cljs (type x))))
+
+
 
 ;; returned from analyzer when macroexpansion needs interleaved eval
 (deftype EvalForm [form]
@@ -47,10 +51,17 @@
 (defprotocol Stack
   (stack [this]))
 
-(extend-protocol Stack
-  #?(:clj Object :cljs default) (stack [_this] nil))
+#?(:cljd (extend-type Object
+           Stack
+           (stack [_this] nil))
+   :clj (extend-protocol Stack
+          Object (stack [_this] nil))
+   :cljs (extend-protocol Stack
+           default (stack [_this] nil)))
 
-#?(:clj (defprotocol Eval
+#?(:cljd (defprotocol Eval
+           (eval [expr ctx bindings]))
+   :clj (defprotocol Eval
           (eval [expr ctx ^objects bindings])))
 
 #?(:cljs
@@ -65,20 +76,57 @@
        ((.-f expr) expr ctx bindings)
        expr)))
 
-(macros/deftime
-  (defmacro ->Node
-    [body stack]
-    (macros/?
-     :clj `(reify
-             sci.impl.types/Eval
-             (~'eval [~'this ~'ctx ~'bindings]
-              ~body)
-             sci.impl.types/Stack
-             (~'stack [_#] ~stack))
-     :cljs `(->NodeR
-             (fn [~'this ~'ctx ~'bindings]
-               ~body)
-             ~stack))))
+(defmacro ->Node
+  [body stack]
+  `(reify
+     sci.impl.types/Eval
+     (~'eval [~'this ~'ctx ~'bindings]
+      ~body)
+     sci.impl.types/Stack
+     (~'stack [_#] ~stack)))
+
+#_( #?(:cljd
+    (defmacro ->Node
+      [body stack]
+      10
+      #_`(reify
+           sci.impl.types/Eval
+           (~'eval [~'this ~'ctx ~'bindings]
+            ~body)
+           sci.impl.types/Stack
+           (~'stack [_#] ~stack)))
+
+    #_ #_:clj
+    (macros/deftime
+      (defmacro ->Node
+        [body stack]
+        (macros/?
+         :clj `(reify
+                 sci.impl.types/Eval
+                 (~'eval [~'this ~'ctx ~'bindings]
+                  ~body)
+                 sci.impl.types/Stack
+                 (~'stack [_#] ~stack))
+         :cljs `(->NodeR
+                 (fn [~'this ~'ctx ~'bindings]
+                   ~body)
+                 ~stack))))
+
+    :cljs
+    (macros/deftime
+      (defmacro ->Node
+        [body stack]
+        (macros/?
+         :clj `(reify
+                 sci.impl.types/Eval
+                 (~'eval [~'this ~'ctx ~'bindings]
+                  ~body)
+                 sci.impl.types/Stack
+                 (~'stack [_#] ~stack))
+         :cljs `(->NodeR
+                 (fn [~'this ~'ctx ~'bindings]
+                   ~body)
+                 ~stack))))))
 
 #?(:clj
    (deftype ConstantNode [x]

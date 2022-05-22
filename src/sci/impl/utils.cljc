@@ -1,13 +1,15 @@
 (ns sci.impl.utils
   {:no-doc true}
-  (:refer-clojure :exclude [eval demunge])
+  (:refer-clojure :exclude [eval])
   (:require [clojure.string :as str]
             [sci.impl.macros :as macros]
             [sci.impl.types :as t]
-            [sci.impl.vars :as vars])
+            [sci.impl.vars :as vars]
+            [missing.stuff :refer [instance? derive isa?]])
   #?(:cljs (:require-macros [sci.impl.utils :refer [kw-identical?]])))
 
-#?(:clj (set! *warn-on-reflection* true))
+#?(:cljd ()
+   :clj (set! *warn-on-reflection* true))
 
 (derive :sci.error/realized-beyond-max :sci/error)
 (derive :sci.error/parse :sci/error)
@@ -17,16 +19,28 @@
       (number? x)
       (string? x)
       (keyword? x)
-      (boolean? x)
-      #?(:clj
+      (dart/is? x bool)
+      #?(:cljd
+         (instance? dart:core/RegExp x)
+         :clj
          (instance? java.util.regex.Pattern x)
          :cljs
          (instance? js/RegExp x))))
 
-(defmacro kw-identical? [k v]
-  (macros/?
-   :clj `(identical? ~k ~v)
-   :cljs `(cljs.core/keyword-identical? ~k ~v)))
+#?(:cljd
+   (def kw-identical? identical?)
+
+   #_ #_:clj
+   (defmacro kw-identical? [k v]
+     (macros/?
+      :clj `(identical? ~k ~v)
+      :cljs `(cljs.core/keyword-identical? ~k ~v)))
+
+   :cljs
+   (defmacro kw-identical? [k v]
+     (macros/?
+      :clj `(identical? ~k ~v)
+      :cljs `(cljs.core/keyword-identical? ~k ~v))))
 
 (defn throw-error-with-location
   ([msg iobj] (throw-error-with-location msg iobj {}))
@@ -47,13 +61,13 @@
 
 (def needs-ctx (symbol "needs-ctx"))
 
-#?(:cljs
+#?(:cljd
+   (def allowed-append "used for allowing interop in with-out-str"
+     (symbol "append"))
+
+   :cljs
    (def allowed-append "used for allowing interop in with-out-str"
      (symbol "append")))
-
-(defn demunge [s]
-  #?(:clj (clojure.lang.Compiler/demunge s)
-     :cljs (cljs.core/demunge s)))
 
 #?(:clj
    (defn rewrite-ex-msg [ex-msg env fm]
@@ -67,14 +81,17 @@
                       (let [ns (symbol (str (:ns fm)))
                             var-name (:name fm)
                             var (get-in @env [:namespaces ns var-name])
-                            fstr (when var (let [varf (if (instance? clojure.lang.IDeref var)
+                            fstr (when var (let [varf (if (instance? #?(:cljd cljd.core/IDeref
+                                                                        :clj clojure.lang.IDeref)
+                                                                     var)
                                                         (deref var)
                                                         var)
                                                  varf (or
                                                        ;; resolve macro inner fn for comparison
                                                        (some-> varf meta :sci.impl/inner-fn)
                                                        varf)
-                                                 fstr (clojure.lang.Compiler/demunge (str varf))
+                                                 fstr #?(:cljd (str varf)
+                                                         :clj (clojure.lang.Compiler/demunge (str varf)))
                                                  fstr (first (str/split fstr #"@"))
                                                  fstr (str/replace fstr (re-pattern (str "^" prefix)) "")]
                                              fstr))]
@@ -88,9 +105,10 @@
        ex-msg)))
 
 (defn rethrow-with-location-of-node
-  ([ctx ^Throwable e raw-node] (rethrow-with-location-of-node ctx (:bindings ctx) e raw-node))
-  ([ctx _bindings ^Throwable e raw-node]
-   (if #?(:clj (or *in-try*
+  ([ctx e raw-node] (rethrow-with-location-of-node ctx (:bindings ctx) e raw-node))
+  ([ctx _bindings ^cljd.core/ExceptionInfo e raw-node]
+   (if #?(:cljd *in-try*
+          :clj (or *in-try*
                    (not= (:main-thread-id ctx)
                          (.getId (Thread/currentThread))))
           :cljs *in-try*) (throw e)
@@ -110,7 +128,8 @@
                wrapping-sci-error? (isa? (:type d) :sci/error)]
            (if wrapping-sci-error?
              (throw e)
-             (let [ex-msg #?(:clj (.getMessage e)
+             (let [ex-msg #?(:cljd (.-message e)
+                             :clj (.getMessage e)
                              :cljs (.-message e))
                    {:keys [:line :column :file]}
                    (or stack
@@ -133,7 +152,8 @@
                  (throw e)))))))))
 
 (defn- iobj? [obj]
-  (and #?(:clj (instance? clojure.lang.IObj obj)
+  (and #?(:cljd (instance? cljd.core/IWithMeta obj)
+          :clj (instance? clojure.lang.IObj obj)
           :cljs (implements? IWithMeta obj))
        (meta obj)))
 
@@ -153,6 +173,32 @@
 (def allowed-recur (symbol "recur"))
 (def var-unbound #?(:clj (Object.)
                     :cljs (js/Object.)))
+
+(defn walk*
+  [inner form]
+  (cond
+    (:sci.impl/op (meta form)) form
+    (list? form) (with-meta (apply list (map inner form))
+                   (meta form))
+    #?(:cljd (instance? cljd.core/IMapEntry form)
+       :clj (instance? clojure.lang.IMapEntry form)
+       :cljs (map-entry? form))
+    #?(:cljd (MapEntry. (inner (key form)) (inner (val form)) )
+       :clj (clojure.lang.MapEntry/create (inner (key form)) (inner (val form)))
+       :cljs (MapEntry. (inner (key form)) (inner (val form)) nil))
+    (seq? form) (with-meta (doall (map inner form))
+                  (meta form))
+    #?(:cljd (instance? cljd.core/IRecord form)
+       :clj (instance? clojure.lang.IRecord form)
+       :cljs (record? form))
+    (reduce (fn [r x] (conj r (inner x))) form form)
+    (coll? form) (into (empty form) (map inner form))
+    :else form))
+
+(defn prewalk
+  "Prewalk with metadata preservation. Does not prewalk :sci.impl/op nodes."
+  [f form]
+  (walk* (partial prewalk f) (f form)))
 
 (defn namespace-object
   "Fetches namespaces from env if it exists. Else, if `create?`,
@@ -234,5 +280,6 @@
      special? (assoc :special true))))
 
 (defn log [& xs]
-  #?(:clj (.println System/err (str/join " " xs))
+  #?(:cljd (println #_System/err (str/join " " xs))
+     :clj (.println System/err (str/join " " xs))
      :cljs (.log js/console (str/join " " xs))))

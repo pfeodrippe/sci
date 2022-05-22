@@ -81,7 +81,8 @@
           (let [loading (:loading ctx)]
             (if (and loading
                      (not (contains? (:loaded-libs env) lib))
-                     (nat-int? #?(:clj (.indexOf ^clojure.lang.PersistentVector loading lib)
+                     (nat-int? #?(:cljd (.indexOf ^cljd.core/PersistentVector loading lib)
+                                  :clj (.indexOf ^clojure.lang.PersistentVector loading lib)
                                   :cljs (.indexOf loading lib))))
               (throw-error-with-location
                (let [lib-emphasized (str "[ " lib " ]")
@@ -132,7 +133,8 @@
         nil))))
 
 (defn load-lib [ctx prefix lib & options]
-  (when (and prefix (pos? (.indexOf (name lib) #?(:clj (int \.)
+  (when (and prefix (pos? (.indexOf (name lib) #?(:cljd \.
+                                                  :clj (int \.)
                                                   :cljs \.))))
     (throw-error-with-location (str "Found lib name '" (name lib) "' containing period with prefix '"
                                     prefix "'.  lib names inside prefix lists must not contain periods")
@@ -260,7 +262,8 @@
                            (if-not (exclude sym)
                              (let [v (get ns sym)]
                                (when-not v
-                                 (throw (new #?(:clj java.lang.IllegalAccessError
+                                 (throw (new #?(:cljd Exception
+                                                :clj java.lang.IllegalAccessError
                                                 :cljs js/Error)
                                              ;; TODO: handle private vars
                                              (if false ;; (get (ns-interns ns) sym)

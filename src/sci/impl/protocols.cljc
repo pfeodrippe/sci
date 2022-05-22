@@ -1,18 +1,21 @@
 (ns sci.impl.protocols
   {:no-doc true}
   (:refer-clojure :exclude [defprotocol extend-protocol
-                            extend extend-type reify satisfies?
+                            extend extend-type #_reify satisfies?
                             extends? implements?])
-  (:require #?(:clj [sci.impl.interop :as interop])
-            [sci.impl.multimethods :as mms]
-            [sci.impl.parser :as parser]
+  (:require #_[sci.impl.multimethods :as mms]
+            #?(:clj [sci.impl.interop :as interop])
             [sci.impl.types :as types]
             [sci.impl.utils :as utils]
-            [sci.impl.vars :as vars]))
+            [sci.impl.vars :as vars]
+            [missing.stuff :refer [instance? class?]]))
 
 (defn default? [#?(:clj ctx
                    :cljs _ctx) sym]
-  #?(:clj (and (or (= 'Object sym)
+  #?(:cljd (and (or (= 'Object sym)
+                    #_(= 'java.lang.Object type))
+                (= Object (interop/resolve-class ctx 'Object)))
+     :clj (and (or (= 'Object sym)
                    (= 'java.lang.Object type))
                (= Object (interop/resolve-class ctx 'Object)))
      :cljs (or (= 'object sym)
@@ -47,8 +50,7 @@
                                           {:methods #{}
                                            :name '~fq-name
                                            :ns *ns*
-                                           :sigs ~(list 'quote sigs-map)
-                                           :var (var ~fq-name)}
+                                           :sigs ~(list 'quote sigs-map)}
                                         ~extend-meta (assoc :extend-via-metadata true)))
            ~@(map (fn [[method-name & _]]
                     (let [fq-name (symbol (str current-ns) (str method-name))
@@ -112,7 +114,7 @@
             env @(:env ctx)
             multi-method-var (get-in env [:namespaces pns meth-sym])
             multi-method @multi-method-var]
-        (mms/multi-fn-add-method-impl
+        #_(mms/multi-fn-add-method-impl
          multi-method atype
          (if extend-via-metadata
            (let [fq (symbol pns-str meth-str)]
@@ -190,16 +192,13 @@
         protocol-ns (:ns protocol-data)
         pns (str (vars/getName protocol-ns))
         expansion
-        `(do
-           ~@(map (fn [[type & meths]]
-                    `(do
-                       (clojure.core/alter-var-root
-                        (var ~protocol-name) update :satisfies (fnil conj #{}) ~type)
-                       ~@(process-methods ctx type meths pns extend-via-metadata)))
+        `(do ~@(map (fn [[type & meths]]
+                      `(do
+                         ~@(process-methods ctx type meths pns extend-via-metadata)))
                     impls))]
     expansion))
 
-(defn extend-type [_form _env ctx atype & proto+meths]
+(defn extend-type [_ _ ctx atype & proto+meths]
   (let [proto+meths (utils/split-when #(not (seq? %)) proto+meths)]
     `(do ~@(map
             (fn [[proto & meths]]
@@ -209,28 +208,20 @@
                     pns (str (vars/getName protocol-ns))
                     extend-via-metadata (:extend-via-metadata proto-data)]
                 `(do
-                   (clojure.core/alter-var-root
-                    (var ~proto) update :satisfies (fnil conj #{}) ~atype)
                    ~@(process-methods ctx atype meths pns extend-via-metadata)))) proto+meths))))
 
 ;; IAtom can be implemented as a protocol on reify and defrecords in sci
 
 (defn find-matching-non-default-method [protocol obj]
-  (or (when-let [sats (:satisfies protocol)]
-        (when-let [t (types/type-impl obj)]
-          #_{:clj-kondo/ignore [:redundant-let]}
-          (let [#?@(:clj [t (if (class? t)
-                              (symbol (.getName ^Class t))
-                              t)])]
-            (contains? sats t))))
-      (boolean (some #(when-let [m (get-method % (types/type-impl obj))]
-                        (let [ms (methods %)
-                              default (get ms :default)]
-                          (not (identical? m default))))
-                     (:methods protocol)))))
+  #_(boolean (some #(when-let [m (get-method % (types/type-impl obj))]
+                    (let [ms (methods %)
+                          default (get ms :default)]
+                      (not (identical? m default))))
+                 (:methods protocol))))
 
 (defn satisfies? [protocol obj]
-  (if #?(:clj (instance? sci.impl.types.IReified obj)
+  #_(if #?(:cljd (instance? sci.impl.types/IReified obj)
+         :clj (instance? sci.impl.types.IReified obj)
          ;; in CLJS we currently don't support mixing "classes" and protocols,
          ;; hence, the instance is always a Reified, thus we can avoid calling
          ;; the slower satisfies?
@@ -275,4 +266,4 @@
 (defn extends?
   "Returns true if atype extends protocol"
   [protocol atype]
-  (boolean (some #(get-method % atype) (:methods protocol))))
+  #_(boolean (some #(get-method % atype) (:methods protocol))))
