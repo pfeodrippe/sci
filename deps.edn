@@ -12,7 +12,7 @@
   :dart {:extra-deps
          {tensegritics/clojuredart
           {:git/url "https://github.com/tensegritics/ClojureDart.git"
-           :sha "5e431f4d866a3b2e7d3b4a9ac5f56fcc2de90c68"}}}
+           :sha "97f4f67d67b03af022255a9f287cd6f4932c36f3"}}}
   :clj-test-runner
   {:extra-deps {com.cognitect/test-runner
                 {:git/url "https://github.com/cognitect-labs/test-runner"
